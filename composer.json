@@ -3,7 +3,7 @@
     "description": "Auto create getters and setters to the model in your laravel project",
     "type": "library",
     "require": {
-        "laravel/framework": "*"
+        "laravel/framework": "5.*-8.*"
     },
     "license": "MIT",
     "authors": [
