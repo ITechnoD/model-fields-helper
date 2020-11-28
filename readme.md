@@ -6,7 +6,7 @@
 ```
 'providers' => [
     ...
-    \ITechnoD\ModelFieldsHelper\ModelFieldHelperServiceProvider,
+    ITechnoD\ModelFieldsHelper\ModelFieldHelperServiceProvider::class,
 ]
 ```
 

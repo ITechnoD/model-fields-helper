@@ -16,7 +16,7 @@ class ModelFieldHelperServiceProvider extends ServiceProvider
             return new GenerateGetterSetterCommand();
         });
 
-        $commands = ['models.field-helper.getters-setters'];
+        $commands = ['models.getters-setters'];
 
         Artisan::starting(function ($artisan) use ($commands) {
             $artisan->resolveCommands($commands);
