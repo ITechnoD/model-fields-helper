@@ -59,7 +59,7 @@ class GenerateGetterSetterCommand extends Command
                 break;
             }
 
-            $classPath = dirname(__DIR__, 2) . '\\Models\\' . $className . '.php';
+            $classPath = dirname(__DIR__, 5) . '\\app\\Models\\' . $className . '.php';
 
             if (!file_exists($classPath)) {
                 $className = $this->ask("The class on the path: {$classPath} was not found.\n Please check the class name is correct and try again.");
