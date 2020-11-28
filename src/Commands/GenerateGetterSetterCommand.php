@@ -13,7 +13,7 @@ class GenerateGetterSetterCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'generate:getters:setters';
+    protected $signature = 'model:generate:getters-setters';
 
     /**
      * The console command description.
@@ -51,7 +51,7 @@ class GenerateGetterSetterCommand extends Command
      */
     public function handle()
     {
-        $className = $this->ask("In which model class do you want to add getters and setters? \n Example: User \n Example: User\UserDetail \n Note: the class will be searched from the app /Models derictory");
+        $className = $this->ask("In which model class do you want to add getters and setters? \n Example: User \n Example: User\UserDetail \n Note: the class will be searched from the app/Models directory");
         $classPath = '';
 
         while (true) {
