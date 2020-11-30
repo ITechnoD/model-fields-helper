@@ -42,6 +42,9 @@ class GenerateGetterSetterDbCommand extends BaseCommand
         ],
     ];
 
+    const DRIVER_SQLSRV = 'sqlsrv',
+        DRIVER_MYSQL = 'mysql';
+
     /**
      * The name and signature of the console command.
      *
@@ -98,8 +101,26 @@ class GenerateGetterSetterDbCommand extends BaseCommand
         /** @var Model $modelClass */
         $modelClass = new $modelClass;
 
-        $columns = DB::connection($modelClass->getConnectionName())
-            ->select(DB::raw('SHOW COLUMNS FROM `' . $modelClass->getTable() . '`'));
+        $dbName = $modelClass->getConnection()->getDatabaseName();
+
+        switch ($modelClass->getConnection()->getDriverName()) {
+            case Self::DRIVER_SQLSRV:
+                $columns = DB::connection($modelClass->getConnectionName())
+                    ->select(DB::raw(
+                        "SELECT COLUMN_NAME AS 'Field', DATA_TYPE AS 'Type', IS_NULLABLE AS 'Null'
+                        FROM information_schema.columns WHERE TABLE_NAME = '{$modelClass->getTable()}'
+                        AND TABLE_CATALOG = '{$dbName}'"));
+                break;
+            case self::DRIVER_MYSQL:
+                $columns = DB::connection($modelClass->getConnectionName())
+                    ->select(DB::raw(
+                        "SELECT COLUMN_NAME AS 'Field', DATA_TYPE AS 'Type', IS_NULLABLE AS 'Null'
+                        FROM information_schema.columns WHERE TABLE_NAME = '{$modelClass->getTable()}'
+                        AND TABLE_SCHEMA = '{$dbName}'"));
+                break;
+            default:
+                throw new \Exception('Driver not supported');
+        }
 
         foreach ($columns as $column) {
             $fieldType = '';
@@ -176,7 +197,7 @@ class GenerateGetterSetterDbCommand extends BaseCommand
             $this->info('The following fields were obtained from the table');
             $this->info($line);
             $choiceColumn = $this->choice('Which field do you want to modify?', $fields, 0);
-            
+
             if ($choiceColumn == 'I choose nothing') {
                 break;
             }
