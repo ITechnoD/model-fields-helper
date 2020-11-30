@@ -65,3 +65,11 @@
         return $this;
     }
 ```
+
+## Model auto create getters and setters from DB
+
+Команда предназначенная для автоматической генерации геттеров и сеттеров на основе полей из базы данных
+
+Для работы введите команду ``php artisan model:generate:getters-setters:db``
+
+Результат выоплнения аналогичен команде ``php artisan model:generate:getters-setters``
