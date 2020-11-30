@@ -4,9 +4,10 @@
 namespace ITechnoD\ModelFieldsHelper\Commands;
 
 
-use Illuminate\Console\Command;
+use ITechnoD\ModelFieldsHelper\DTO\ModelDTO;
+use ITechnoD\ModelFieldsHelper\DTO\ModelFieldDTO;
 
-class GenerateGetterSetterCommand extends Command
+class GenerateGetterSetterCommand extends BaseCommand
 {
     /**
      * The name and signature of the console command.
@@ -22,46 +23,24 @@ class GenerateGetterSetterCommand extends Command
      */
     protected $description = 'Команда для автоматической генерации геттеров и сеттеров';
 
-    const TYPE_INT = 'int',
-        TYPE_STRING = 'string',
-        TYPE_BOOL = 'bool',
-        TYPE_DATETIME = 'datetime';
-
-    private $fieldTypes = [
-        self::TYPE_INT,
-        self::TYPE_STRING,
-        self::TYPE_BOOL,
-        self::TYPE_DATETIME,
-    ];
-
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
-    public function __construct()
+    protected function executeCommand()
     {
-        parent::__construct();
-    }
+        $this->info(' In which model class do you want to add getters and setters?');
+        $this->info(' Example: <fg=cyan>User');
+        $this->info(' Example: <fg=cyan>User\UserDetail');
+        $this->info(' Note: the class will be searched from the app/Models directory');
 
-    /**
-     * Execute the console command.
-     *
-     * @return int
-     */
-    public function handle()
-    {
-        $className = $this->ask("In which model class do you want to add getters and setters? \n Example: User \n Example: User\UserDetail \n Note: the class will be searched from the app/Models directory");
+        $className = $this->ask("Please enter model class name");
         $classPath = '';
+        $modelDTO = new ModelDTO();
 
         while (true) {
             if (empty($className)) {
                 break;
             }
+            $classPath = $this->getClassFilePath($className);
 
-            $classPath = dirname(__DIR__, 5) . '\\app\\Models\\' . $className . '.php';
-
-            if (!file_exists($classPath)) {
+            if (!$this->checkClassFileExists($classPath)) {
                 $className = $this->ask("The class on the path: {$classPath} was not found.\n Please check the class name is correct and try again.");
                 continue;
             }
@@ -74,16 +53,12 @@ class GenerateGetterSetterCommand extends Command
             return 0;
         }
 
-        // Получаем класс
-        $classContent = file_get_contents($classPath);
+        $this->setClassName($className);
+        $this->setClassPath($classPath);
+        $this->openClassFile();
+        $this->prepareClassContent();
 
-        // Подготавливаем класс удаляя перенос строки
-        // и последнюю фигурную скобку
-        $classContent = $this->prepareClassContent($classContent);
-
-        $result = '';
-
-        $functionNames = $this->getFunctionNames($classContent);
+        $functionNames = $this->getFunctionNames();
 
         while (true) {
             $fieldName = $this->ask("Enter field name. example id");
@@ -99,15 +74,15 @@ class GenerateGetterSetterCommand extends Command
                 break;
             }
 
-            $functionName = $this->toCamelCase($fieldName, true);
+            $functionName = $this->createFunctionName($fieldName);
 
-            if (!empty($functionNames['getters']) && in_array($functionName, $functionNames['getters'])) {
+            if (!empty($functionNames->getGetters()) && in_array($functionName, $functionNames->getGetters())) {
                 $getterExists = true;
             } else {
                 $getterExists = false;
             }
 
-            if (!empty($functionNames['setters']) && in_array($functionName, $functionNames['setters'])) {
+            if (!empty($functionNames->getSetters()) && in_array($functionName, $functionNames->getSetters())) {
                 $setterExists = true;
             } else {
                 $setterExists = false;
@@ -133,15 +108,7 @@ class GenerateGetterSetterCommand extends Command
 
             $canNull = $this->confirm('Can a value be nullable?');
 
-            $parameterName = $this->toCamelCase($fieldName);
-
-            if (!$getterExists) {
-                $result .= $this->addGetter($fieldName, $fieldType, $functionName, $canNull);
-            }
-
-            if (!$setterExists) {
-                $result .= $this->addSetter($fieldName, $fieldType, $functionName, $parameterName, $canNull);
-            }
+            $this->createFieldAndAddToModel($fieldName, $functionName, $fieldType, $canNull, $getterExists, $setterExists);
 
             if ($this->confirm('Do you wish continue?', true)) {
                 continue;
@@ -150,202 +117,6 @@ class GenerateGetterSetterCommand extends Command
             break;
         }
 
-        if (!empty($result)) {
-            $classContent .= "\n" . preg_replace('/(.*)\n/msi', '$1', $result) . "}\n";
-
-            file_put_contents($classPath, $classContent);
-
-            $this->info('Changes saved in: ' . $classPath);
-        } else {
-            $this->info('No change, goodbye.');
-        }
-
-        return 0;
-    }
-
-    /**
-     * @param string $fieldName
-     * @param string $fieldType
-     * @param string $functionName
-     * @param string $parameterName
-     * @param bool $canNull
-     * @return string
-     */
-    private function addSetter(
-        string $fieldName,
-        string $fieldType,
-        string $functionName,
-        string $parameterName,
-        bool $canNull
-    ): string
-    {
-        return
-            "    /**\n" .
-            "     * Auto generate setter for {$fieldName}\n" .
-            "     *\n" .
-            "     * @param {$this->getTypeForAnnotationParam($fieldType, $canNull)}\${$parameterName}\n" .
-            "     * @return \$this\n" .
-            "     */\n" .
-            "    public function set{$functionName}({$this->getTypeForParam($fieldType, $canNull)}\${$parameterName}): self\n" .
-            "    {\n" .
-            "        \$this->{$fieldName} = \${$parameterName};\n" .
-            "        return \$this;\n" .
-            "    }\n\n";
-    }
-
-    /**
-     * @param string $fieldName
-     * @param string $fieldType
-     * @param string $functionName
-     * @param bool $canNull
-     * @return string
-     */
-    private function addGetter(
-        string $fieldName,
-        string $fieldType,
-        string $functionName,
-        bool $canNull
-    ): string
-    {
-        return
-            "    /**\n" .
-            "     * Auto generate getter for {$fieldName}\n" .
-            "     *\n" .
-            "     * @return {$this->getTypeForAnnotationReturn($fieldType, $canNull)}\n" .
-            "     */\n" .
-            "    public function get{$functionName}(){$this->getTypeForReturn($fieldType, $canNull)}\n" .
-            "    {\n" .
-            "        return \$this->{$fieldName};\n" .
-            "    }\n\n";
-    }
-
-    /**
-     * @param string|null $type
-     * @return string|null
-     */
-    private function getType(?string $type): ?string
-    {
-        if ($type == self::TYPE_DATETIME) {
-            return '\DateTime';
-        }
-
-        return $type;
-    }
-
-    /**
-     * @param string $type
-     * @param bool $canNull
-     * @return string
-     */
-    private function getTypeForParam(string $type, bool $canNull): string
-    {
-        return $type ? (($canNull ? '?' : '') . $this->getType($type) . ' ') : '';
-    }
-
-    /**
-     * @param string $type
-     * @param bool $canNull
-     * @return string
-     */
-    private function getTypeForAnnotationParam(string $type, bool $canNull): string
-    {
-        return $type ? ($this->getType($type) . ($canNull ? '|null' : '') . ' ') : '';
-    }
-
-    /**
-     * @param string $type
-     * @param bool $canNull
-     * @return string
-     */
-    private function getTypeForAnnotationReturn(string $type, bool $canNull)
-    {
-        return ($this->getType($type) ?? 'mixed') . ($canNull ? '|null' : '');
-    }
-
-    /**
-     * @param string $type
-     * @param bool $canNull
-     * @return mixed
-     */
-    private function getTypeForReturn(string $type, bool $canNull)
-    {
-        return $type ? (': ' . ($canNull ? '?' : '') . $this->getType($type)) : '';
-    }
-
-    /**
-     * Метод для подготовки кода из класса к форматированию
-     * путём удаления переноса строки и закрывающей фигурной скобки
-     *
-     * @param string $classContent
-     * @return string
-     */
-    private function prepareClassContent(string $classContent): string
-    {
-        // Заменяем перенос строки и закрывающую фигурную скобку
-        // для того, чтобы можно было вместо них раместить новй код
-        $classContent = preg_replace('/(.*)\n/msi', "$1", $classContent);
-
-        //если поселдний символ закрывающаяся фигурная скобка
-        //то то заменяем её
-        if (strpos("}", substr(rtrim($classContent), -1)) !== false) {
-            $classContent = preg_replace('/(.*)\}/msi', "$1", $classContent);
-        }
-
-        return $classContent;
-    }
-
-    /**
-     * @param $underscored
-     * @param false $capitalizeFirst
-     * @return string|string[]|null
-     */
-    private function toCamelCase($underscored, $capitalizeFirst = false)
-    {
-        $res = preg_replace_callback("|.*(_.).*|", "self::uppercase", $underscored);
-        $res = preg_replace_callback("|.*(_.).*|", "self::uppercase", $res);
-
-        if ($capitalizeFirst) {
-            $res = strToUpper(substr($res, 0, 1)) . substr($res, 1);
-        }
-
-        return $res;
-    }
-
-    /**
-     * @param $matches
-     * @return mixed
-     */
-    private function uppercase($matches)
-    {
-        for ($i = 1; $i < count($matches); $i++) {
-            $matches[0] = str_replace($matches[$i], strtoupper(substr($matches[$i], 1)), $matches[0]);
-        }
-
-        return $matches[0];
-    }
-
-    /**
-     * Получаем список функций которые уже есть
-     *
-     * @param string $classContent
-     * @return array
-     */
-    private function getFunctionNames(string $classContent): array
-    {
-        $result = [];
-
-        preg_match("/function get(.*)\(/", $classContent, $mathGetters);
-
-        if (!empty($mathGetters) && !empty($mathGetters[1])) {
-            $result['getters'][] = $mathGetters[1];
-        }
-
-        preg_match("/function set(.*)\(/", $classContent, $mathSetters);
-
-        if (!empty($mathSetters) && !empty($mathSetters[1])) {
-            $result['setters'][] = $mathSetters[1];
-        }
-
-        return $result;
+        $this->finishAndSave();
     }
 }
